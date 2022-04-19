@@ -4,6 +4,7 @@ from stable_baselines3.ppo.ppo import PPO
 from bandit.env import DebuggingEnv
 from stable_baselines3.common.evaluation import evaluate_policy
 
+
 def main(args):
     """
     Example to set a training process with Stable Baselines 3
@@ -19,8 +20,10 @@ def main(args):
     print(f"Mean reward: {mean_reward}")
     print(f"Std reward: {std_reward}")
 
+
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--path",

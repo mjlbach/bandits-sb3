@@ -8,6 +8,7 @@ from bandit.env import make_env
 
 from bandit.model import CustomCombinedExtractor
 
+
 def main(args):
     """
     Example to set a training process with Stable Baselines 3
@@ -32,7 +33,13 @@ def main(args):
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(checkpoints_dir, exist_ok=True)
 
-    model = PPO("MultiInputPolicy", env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs)
+    model = PPO(
+        "MultiInputPolicy",
+        env,
+        verbose=1,
+        tensorboard_log=log_dir,
+        policy_kwargs=policy_kwargs,
+    )
     print(model.policy)
 
     # Train the model for the given number of steps
@@ -42,8 +49,10 @@ def main(args):
         # Save the trained model and delete it
         model.save(os.path.join(checkpoints_dir, f"ckpt-{i*total_timesteps}"))
 
+
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--name",

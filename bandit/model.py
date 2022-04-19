@@ -3,6 +3,8 @@ import torch.nn as nn
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 from gym.spaces import Dict
+
+
 class CustomCombinedExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space: Dict):
         # We do not know features-dim here before going over all the items,
@@ -17,12 +19,12 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         for key, subspace in observation_space.spaces.items():
             if key in ["vectorized_goal", "task_obs"]:
                 extractors[key] = nn.Sequential(
-                        nn.Linear(subspace.shape[0], 128),
-                        nn.ReLU(),
-                        nn.Linear(128, 128),
-                        nn.ReLU(),
-                        nn.Linear(128, feature_size),
-                        nn.Flatten(),
+                    nn.Linear(subspace.shape[0], 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, feature_size),
+                    nn.Flatten(),
                 )
             elif key in ["rgb"]:
                 n_input_channels = subspace.shape[2]  # channel last
@@ -35,7 +37,9 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
                     nn.ReLU(),
                     nn.Flatten(),
                 )
-                test_tensor = th.zeros([subspace.shape[2], subspace.shape[0], subspace.shape[1]])
+                test_tensor = th.zeros(
+                    [subspace.shape[2], subspace.shape[0], subspace.shape[1]]
+                )
                 with th.no_grad():
                     n_flatten = cnn(test_tensor[None]).shape[1]
                 fc = nn.Sequential(nn.Linear(n_flatten, feature_size), nn.ReLU())
@@ -71,10 +75,9 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         # self.extractors contain nn.Modules that do all the processing.
         for key, extractor in self.extractors.items():
             if key in ["rgb", "highlight", "depth", "seg", "ins_seg"]:
-                observations[key] = observations[key].permute((0, 3, 1, 2)) #type: ignore
+                observations[key] = observations[key].permute((0, 3, 1, 2))  # type: ignore
             elif key in ["scan"]:
-                observations[key] = observations[key].permute((0, 2, 1)) #type: ignore
-            encoded_tensor_list.append(extractor(observations[key])) #type: ignore
+                observations[key] = observations[key].permute((0, 2, 1))  # type: ignore
+            encoded_tensor_list.append(extractor(observations[key]))  # type: ignore
         # Return a (B, self._features_dim) PyTorch tensor, where B is batch dimension.
         return th.cat(encoded_tensor_list, dim=1)
-
