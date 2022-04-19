@@ -22,9 +22,6 @@ def main(args):
     env = VecMonitor(env)
 
     # Obtain the arguments/parameters for the policy and create the PPO model
-    policy_kwargs = dict(
-        features_extractor_class=CustomCombinedExtractor,
-    )
     save_dir = "experiments"
     experiment_name = args.name
     log_dir = os.path.join(save_dir, experiment_name, "log")
@@ -33,10 +30,15 @@ def main(args):
     os.makedirs(log_dir, exist_ok=True)
     os.makedirs(checkpoints_dir, exist_ok=True)
 
+    policy_kwargs = dict(
+        features_extractor_class=CustomCombinedExtractor,
+    )
+
     model = PPO(
         "MultiInputPolicy",
         env,
         verbose=1,
+        learning_rate=1e-5, # This is key
         tensorboard_log=log_dir,
         policy_kwargs=policy_kwargs,
     )
