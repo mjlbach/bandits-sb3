@@ -2,6 +2,8 @@ import gym
 import numpy as np
 from enum import Enum
 from gym.spaces import Discrete, Box, Dict
+from typing import Callable
+from stable_baselines3.common.utils import set_random_seed
 
 class Choice(Enum):
     left = 0
@@ -66,6 +68,12 @@ class DebuggingEnv(gym.Env):
 
         return(obs, reward, True, {})
 
-def env_creator(_):
-    return DebuggingEnv() 
+def make_env(rank: int, seed: int = 0) -> Callable:
+    def _init():
+        env = DebuggingEnv()
+        env.seed(seed + rank)
+        return env
+
+    set_random_seed(seed)
+    return _init
 

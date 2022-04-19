@@ -1,101 +1,126 @@
-import re
-from pathlib import Path
-
-import numpy as np
-from ray.rllib.agents import ppo
-from ray.tune.logger import UnifiedLogger
-from ray.tune.registry import register_env
+import logging
 import os
-from ray.rllib.models.catalog import ModelCatalog
+from typing import Callable
 
-import numpy as np
-from bandit.model import ComplexInputNetwork
-from bandit.env import env_creator
+import torch as th
+import torch.nn as nn
+from stable_baselines3.ppo.ppo import PPO
+from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+from stable_baselines3.common.utils import set_random_seed
+from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env.vec_monitor import VecMonitor
+from bandit.env import DebuggingEnv
 
-ModelCatalog.register_custom_model("graph_extractor", ComplexInputNetwork)
+from gym.spaces import Dict
 
-def main(args):
-    register_env("env_creator", env_creator)
 
-    n_steps = 160
-    num_envs = 8
+class CustomCombinedExtractor(BaseFeaturesExtractor):
+    def __init__(self, observation_space: Dict):
+        # We do not know features-dim here before going over all the items,
+        # so put something dummy for now. PyTorch requires calling
+        # nn.Module.__init__ before adding modules
+        super(CustomCombinedExtractor, self).__init__(observation_space, features_dim=1)
 
-    experiment_save_path = os.path.expanduser("~/ray_results")
-    experiment_name = args.name
-    training_timesteps = 5e8
-    save_freq = 1e6
+        extractors = {}
 
-    checkpoint_path = Path(experiment_save_path, experiment_name)
-    num_epochs = np.round(training_timesteps / n_steps).astype(int)
-    save_ep_freq = np.round(
-        num_epochs / (training_timesteps / save_freq)
-    ).astype(int)
+        total_concat_size = 0
+        feature_size = 128
+        for key, subspace in observation_space.spaces.items():
+            if key in ["vectorized_goal", "task_obs"]:
+                extractors[key] = nn.Sequential(nn.Linear(subspace.shape[0], feature_size), nn.ReLU())
+            elif key in ["rgb"]:
+                n_input_channels = subspace.shape[2]  # channel last
+                cnn = nn.Sequential(
+                    nn.Conv2d(n_input_channels, 32, kernel_size=8, stride=4, padding=0),
+                    nn.ReLU(),
+                    nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
+                    nn.ReLU(),
+                    nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                )
+                test_tensor = th.zeros([subspace.shape[2], subspace.shape[0], subspace.shape[1]])
+                with th.no_grad():
+                    n_flatten = cnn(test_tensor[None]).shape[1]
+                fc = nn.Sequential(nn.Linear(n_flatten, feature_size), nn.ReLU())
+                extractors[key] = nn.Sequential(cnn, fc)
+            elif key in ["scan"]:
+                n_input_channels = subspace.shape[1]  # channel last
+                cnn = nn.Sequential(
+                    nn.Conv1d(n_input_channels, 32, kernel_size=8, stride=4, padding=0),
+                    nn.ReLU(),
+                    nn.Conv1d(32, 64, kernel_size=4, stride=2, padding=0),
+                    nn.ReLU(),
+                    nn.Conv1d(64, 64, kernel_size=3, stride=1, padding=0),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                )
+                test_tensor = th.zeros([subspace.shape[1], subspace.shape[0]])
+                with th.no_grad():
+                    n_flatten = cnn(test_tensor[None]).shape[1]
+                fc = nn.Sequential(nn.Linear(n_flatten, feature_size), nn.ReLU())
+                extractors[key] = nn.Sequential(cnn, fc)
+            else:
+                raise ValueError("Unknown observation key: %s" % key)
+            total_concat_size += feature_size
 
-    config = {
-        "env": "env_creator",
-        "model": {
-          "custom_model": "graph_extractor", # THIS LINE IS THE BROKEN ONE
-          # "post_fcnet_hiddens": [128, 128, 128],
-          # "fcnet_hiddens": [128, 128, 128],
-          "conv_filters": [[16, [4, 4], 4], [32, [4, 4], 4], [256, [8, 8], 2]]
-        },
-        "num_workers":num_envs,
-        "framework": "torch",
-        "seed": 0,
-        "lambda": 0.9,
-        "lr": 1e-4,
-        "train_batch_size": n_steps,
-        "rollout_fragment_length":  n_steps // num_envs,
-        "num_sgd_iter": 30,
-        "sgd_minibatch_size": 128,
-        "gamma": 0.99,
-        "create_env_on_driver": False,
-        "num_gpus": 0,
-        # "callbacks": MetricsCallback,
-        # "log_level": "DEBUG",
-        # "_disable_preprocessor_api": False,
-    }
+        self.extractors = nn.ModuleDict(extractors)
 
-    log_path = str(checkpoint_path.joinpath("log"))
-    print(f"Saving to {log_path}")
-    Path(log_path).mkdir(parents=True, exist_ok=True)
-    trainer = ppo.PPOTrainer(
-        config,
-        logger_creator=lambda x: UnifiedLogger(x, log_path), #type: ignore
+        # Update the features dim manually
+        self._features_dim = total_concat_size
+
+    def forward(self, observations) -> th.Tensor:
+        encoded_tensor_list = []
+
+        # self.extractors contain nn.Modules that do all the processing.
+        for key, extractor in self.extractors.items():
+            if key in ["rgb", "highlight", "depth", "seg", "ins_seg"]:
+                observations[key] = observations[key].permute((0, 3, 1, 2)) #type: ignore
+            elif key in ["scan"]:
+                observations[key] = observations[key].permute((0, 2, 1)) #type: ignore
+            encoded_tensor_list.append(extractor(observations[key])) #type: ignore
+        # Return a (B, self._features_dim) PyTorch tensor, where B is batch dimension.
+        return th.cat(encoded_tensor_list, dim=1)
+
+
+def main():
+    """
+    Example to set a training process with Stable Baselines 3
+    Loads a scene and starts the training process for a navigation task with images using PPO
+    Saves the checkpoint and loads it again
+    """
+    tensorboard_log_dir = "log_dir"
+    num_environments = 8
+
+    # Function callback to create environments
+    def make_env(rank: int, seed: int = 0) -> Callable:
+        def _init():
+            env = DebuggingEnv()
+            env.seed(seed + rank)
+            return env
+
+        set_random_seed(seed)
+        return _init
+
+    # Multiprocess
+    env = SubprocVecEnv([make_env(i) for i in range(num_environments)])
+    env = VecMonitor(env)
+
+    # Obtain the arguments/parameters for the policy and create the PPO model
+    policy_kwargs = dict(
+        features_extractor_class=CustomCombinedExtractor,
     )
+    os.makedirs(tensorboard_log_dir, exist_ok=True)
+    model = PPO("MultiInputPolicy", env, verbose=1, tensorboard_log=tensorboard_log_dir, policy_kwargs=policy_kwargs)
+    print(model.policy)
 
-    if Path(checkpoint_path).exists():
-        checkpoints = Path(checkpoint_path).rglob("checkpoint-*")
-        checkpoints = [
-            str(f) for f in checkpoints if re.search(r".*checkpoint-\d*$", str(f))
-        ]
-        checkpoints = sorted(checkpoints)
-        if len(checkpoints) > 0:
-            trainer.restore(checkpoints[-1])
-
-    for i in range(num_epochs):
-        # Perform one iteration of training the policy with PPO
-        trainer.train()
-
-        if (i % save_ep_freq) == 0:
-            checkpoint = trainer.save(checkpoint_path)
-            print("checkpoint saved at", checkpoint)
-
+    # Train the model for the given number of steps
+    total_timesteps = 1000
+    for i in range(100):
+        model.learn(total_timesteps)
+        # Save the trained model and delete it
+        model.save(f"ckpt-{i*total_timesteps}")
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--name",
-        "-n",
-        default="test",
-        help="which config file to use [default: use yaml files in examples/configs]",
-    )
-    args = parser.parse_args()
-    main(args)
-
-# if __name__ == "__main__":
-#     env = DebuggingEnv()
-#     env.reset()
-#     env.step(env.action_space.sample())
-#
+    logging.basicConfig(level=logging.INFO)
+    main()
