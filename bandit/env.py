@@ -14,7 +14,7 @@ class Category(Enum):
     circle = 1
 
 class DebuggingEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, debug=False):
         super().__init__()
 
         self.action_space = Discrete(2)
@@ -23,7 +23,7 @@ class DebuggingEnv(gym.Env):
             'vectorized_goal': Box(low=0, high=1, shape=(2,)),
         })
 
-        self.debug = False
+        self.debug = debug
         self.rng = np.random.default_rng()
 
     def observe(self):

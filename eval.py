@@ -14,8 +14,8 @@ def main():
     Saves the checkpoint and loads it again
     """
     # Obtain the arguments/parameters for the policy and create the PPO model
-    model = PPO.load("ckpt-9000")
-    eval_env = DebuggingEnv()
+    model = PPO.load("save/ckpt-9000")
+    eval_env = DebuggingEnv(debug=True)
 
     # Train the model for the given number of steps
     for i in range(100):
