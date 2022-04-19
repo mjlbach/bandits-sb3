@@ -15,16 +15,12 @@ def main(args):
     """
     # Obtain the arguments/parameters for the policy and create the PPO model
     model = PPO.load(args.path)
-    eval_env = DebuggingEnv(debug=True)
+    eval_env = DebuggingEnv(debug=False)
 
-    successes = 0
-    total = 1000
     # Train the model for the given number of steps
-    for _ in range(total):
-        mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=20)
-        if mean_reward == 1:
-            successes += 1
-    print(f"Success rate: {successes/total}")
+    mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=1000)
+    print(f"Mean reward: {mean_reward}")
+    print(f"Std reward: {std_reward}")
 
 if __name__ == "__main__":
     import argparse
