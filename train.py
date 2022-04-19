@@ -1,5 +1,5 @@
-import logging
 import os
+import logging
 
 from stable_baselines3.ppo.ppo import PPO
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
@@ -8,13 +8,12 @@ from bandit.env import make_env
 
 from bandit.model import CustomCombinedExtractor
 
-def main():
+def main(args):
     """
     Example to set a training process with Stable Baselines 3
     Loads a scene and starts the training process for a navigation task with images using PPO
     Saves the checkpoint and loads it again
     """
-    tensorboard_log_dir = "log_dir"
     num_environments = 8
 
     # Multiprocess
@@ -25,9 +24,15 @@ def main():
     policy_kwargs = dict(
         features_extractor_class=CustomCombinedExtractor,
     )
-    os.makedirs(tensorboard_log_dir, exist_ok=True)
-    os.makedirs("save", exist_ok=True)
-    model = PPO("MultiInputPolicy", env, verbose=1, tensorboard_log=tensorboard_log_dir, policy_kwargs=policy_kwargs)
+    save_dir = "experiments"
+    experiment_name = args.name
+    log_dir = os.path.join(save_dir, experiment_name, "log")
+    checkpoints_dir = os.path.join(save_dir, experiment_name, "checkpoints")
+
+    os.makedirs(log_dir, exist_ok=True)
+    os.makedirs(checkpoints_dir, exist_ok=True)
+
+    model = PPO("MultiInputPolicy", env, verbose=1, tensorboard_log=log_dir, policy_kwargs=policy_kwargs)
     print(model.policy)
 
     # Train the model for the given number of steps
@@ -35,8 +40,17 @@ def main():
     for i in range(100):
         model.learn(total_timesteps, reset_num_timesteps=False)
         # Save the trained model and delete it
-        model.save(f"save/ckpt-{i*total_timesteps}")
+        model.save(os.path.join(checkpoints_dir, f"ckpt-{i*total_timesteps}"))
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--name",
+        "-n",
+        default="test",
+        help="name to save experiment under",
+    )
+    args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
-    main()
+    main(args)

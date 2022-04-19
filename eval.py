@@ -1,9 +1,6 @@
 import logging
-import os
 
 from stable_baselines3.ppo.ppo import PPO
-from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
-from stable_baselines3.common.vec_env.vec_monitor import VecMonitor
 from bandit.env import DebuggingEnv
 from stable_baselines3.common.evaluation import evaluate_policy
 
@@ -29,7 +26,7 @@ if __name__ == "__main__":
         "--path",
         "-p",
         required=True,
-        help="which config file to use [default: use yaml files in examples/configs]",
+        help="path of ckpt zip to load",
     )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
