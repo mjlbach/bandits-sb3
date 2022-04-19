@@ -111,15 +111,16 @@ def main():
         features_extractor_class=CustomCombinedExtractor,
     )
     os.makedirs(tensorboard_log_dir, exist_ok=True)
+    os.makedirs("save", exist_ok=True)
     model = PPO("MultiInputPolicy", env, verbose=1, tensorboard_log=tensorboard_log_dir, policy_kwargs=policy_kwargs)
     print(model.policy)
 
     # Train the model for the given number of steps
     total_timesteps = 1000
     for i in range(100):
-        model.learn(total_timesteps)
+        model.learn(total_timesteps, reset_num_timesteps=False)
         # Save the trained model and delete it
-        model.save(f"ckpt-{i*total_timesteps}")
+        model.save(f"save/ckpt-{i*total_timesteps}")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

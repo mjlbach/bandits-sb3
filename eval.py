@@ -4,8 +4,8 @@ import os
 from stable_baselines3.ppo.ppo import PPO
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
 from stable_baselines3.common.vec_env.vec_monitor import VecMonitor
-from bandit.env import make_env
-from bandit.model import CustomCombinedExtractor
+from bandit.env import DebuggingEnv
+from stable_baselines3.common.evaluation import evaluate_policy
 
 def main():
     """
@@ -13,28 +13,14 @@ def main():
     Loads a scene and starts the training process for a navigation task with images using PPO
     Saves the checkpoint and loads it again
     """
-    tensorboard_log_dir = "log_dir"
-    num_environments = 8
-
-    # Function callback to create environments
-    # Multiprocess
-    env = SubprocVecEnv([make_env(i) for i in range(num_environments)])
-    env = VecMonitor(env)
-
     # Obtain the arguments/parameters for the policy and create the PPO model
-    policy_kwargs = dict(
-        features_extractor_class=CustomCombinedExtractor,
-    )
-    os.makedirs(tensorboard_log_dir, exist_ok=True)
-    model = PPO("MultiInputPolicy", env, verbose=1, tensorboard_log=tensorboard_log_dir, policy_kwargs=policy_kwargs)
-    print(model.policy)
+    model = PPO.load("ckpt-9000")
+    eval_env = DebuggingEnv()
 
     # Train the model for the given number of steps
-    total_timesteps = 1000
     for i in range(100):
-        model.learn(total_timesteps)
-        # Save the trained model and delete it
-        model.save(f"ckpt-{i*total_timesteps}")
+        mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=20)
+        print(mean_reward)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

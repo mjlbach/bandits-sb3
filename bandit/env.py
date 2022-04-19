@@ -23,7 +23,7 @@ class DebuggingEnv(gym.Env):
             'vectorized_goal': Box(low=0, high=1, shape=(2,)),
         })
 
-        self.debug = True
+        self.debug = False
         self.rng = np.random.default_rng()
 
     def observe(self):

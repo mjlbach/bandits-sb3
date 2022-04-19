@@ -16,7 +16,13 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         feature_size = 128
         for key, subspace in observation_space.spaces.items():
             if key in ["vectorized_goal", "task_obs"]:
-                extractors[key] = nn.Sequential(nn.Linear(subspace.shape[0], feature_size), nn.ReLU())
+                extractors[key] = nn.Sequential(
+                        nn.Linear(subspace.shape[0], 128),
+                        nn.ReLU(),
+                        nn.Linear(128, 128),
+                        nn.ReLU(),
+                        nn.Linear(128, feature_size),
+                )
             elif key in ["rgb"]:
                 n_input_channels = subspace.shape[2]  # channel last
                 cnn = nn.Sequential(
