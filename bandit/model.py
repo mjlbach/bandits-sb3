@@ -22,6 +22,7 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
                         nn.Linear(128, 128),
                         nn.ReLU(),
                         nn.Linear(128, feature_size),
+                        nn.Flatten(),
                 )
             elif key in ["rgb"]:
                 n_input_channels = subspace.shape[2]  # channel last
